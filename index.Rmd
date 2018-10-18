@@ -9,22 +9,68 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# A simple data analysis using salmon escapement data
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+##Load packages
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(leaflet)
+library(DT)
 ```
 
-## Including Plots
+##Read in data
+Next, read in some escapement data: [Alaska Department of Fish and Game. 2017. Daily salmon escapement counts from the OceanAK database, Alaska, 1921-2017. Knowledge Network for Biocomplexity. doi:10.5063/F1TX3CKH.](https://knb.ecoinformatics.org/knb/d1/mn/v2/object/urn%3Auuid%3Af119a05b-bbe7-4aea-93c6-85434dcb1c5e)
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r read in data}
+esc <- read_csv("https://knb.ecoinformatics.org/knb/d1/mn/v2/object/urn%3Auuid%3Af119a05b-bbe7-4aea-93c6-85434dcb1c5e")
+head(esc)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Calculate annual median escapement by species
+```{r}
+esc_annual <- esc %>%
+  separate(sampleDate, into = c("Year", "Month", "Day"), sep = "-") %>%
+  group_by(Species, Year) %>%
+  summarize(AnnualCount = sum(DailyCount))
+head(esc_annual)
+
+esc_annual_medians <- esc_annual %>%
+  group_by(Species) %>%
+  summarize(MedianEsc = median(AnnualCount))
+datatable(esc_annual_medians)
+```
+
+Make a bar plot
+```{r}
+esc_median_barplot <- ggplot(data = esc_annual_medians, aes(x = Species, 
+                                                            y = MedianEsc)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+esc_median_barplot
+```
+
+
+# Map the bad boy using `leaflet`
+
+## Clean the data
+Remove columns we don't need and keep only one row for each location.
+
+```{r clean the location data}
+locations <- esc %>%
+  select(Location, SASAP.Region, Latitude, Longitude) %>%
+  distinct() %>%
+  # remove locations without lat/lons
+  drop_na()
+```
+
+## Make the map
+```{r}
+leaflet(locations) %>%
+  addTiles() %>%
+  # Need to add ~ (tildes) in front of the arguments for some unknown reason!
+  addMarkers(lat = ~Latitude, lng = ~Longitude, popup = ~Location)
+```
+
